@@ -6,7 +6,6 @@ const LINKS = {
     { label: "City Search", href: "/cities" },
     { label: "Compare Matrix", href: "/compare" },
     { label: "Interactive Map", href: "/map" },
-    { label: "AI Analyst", href: "/ai-analyst" },
   ],
   "Data Sources": [
     { label: "UN World Urbanization", href: "#" },

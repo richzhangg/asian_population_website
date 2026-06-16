@@ -116,12 +116,6 @@ export default function Hero() {
               <ArrowRight className="w-4 h-4" />
             </Button>
           </Link>
-          <Link href="/ai-analyst">
-            <Button variant="outline" size="xl" className="w-full sm:w-auto">
-              <Bot className="w-4 h-4" />
-              AI Urban Analyst
-            </Button>
-          </Link>
         </motion.div>
 
         {/* Trust bar */}
