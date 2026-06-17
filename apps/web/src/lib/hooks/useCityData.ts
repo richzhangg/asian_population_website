@@ -1,15 +1,10 @@
 "use client";
 import useSWR from "swr";
-import { getCityDashboard, getCities, searchCities } from "@/lib/api/cities";
-import type { CityDashboard, City, SearchResult } from "@/types/city";
+import { getCities, searchCities } from "@/lib/api/cities";
+import type { City, SearchResult } from "@/types/city";
 
-export function useCityDashboard(slug: string | null) {
-  return useSWR<CityDashboard>(
-    slug ? `city-dashboard-${slug}` : null,
-    () => getCityDashboard(slug!),
-    { revalidateOnFocus: false, dedupingInterval: 60_000 }
-  );
-}
+// City dashboards are now fetched server-side via the World Bank service.
+// This hook is kept for the cities list and search, which remain client-side.
 
 export function useCities() {
   return useSWR<City[]>("cities", getCities, {

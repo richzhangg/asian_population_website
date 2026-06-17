@@ -1,4 +1,5 @@
 "use client";
+import { Fragment } from "react";
 import { motion } from "framer-motion";
 import { Trophy, AlertCircle, Minus } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
@@ -8,11 +9,20 @@ interface Props {
   matrix: ComparisonMatrix;
 }
 
-function formatValue(value: number | null, format: string): string {
+function fmtLarge(n: number): string {
+  if (n >= 1e12) return `$${(n / 1e12).toFixed(2)}T`;
+  if (n >= 1e9) return `$${(n / 1e9).toFixed(1)}B`;
+  if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
+  return `$${n.toLocaleString()}`;
+}
+
+function formatValue(value: number | null, format: string, metricKey?: string): string {
   if (value === null) return "–";
+  if (metricKey === "gdp") return fmtLarge(value);
+  if (metricKey === "gdpPerCapita") return `$${Math.round(value).toLocaleString()}`;
   switch (format) {
     case "percentage":
-      return `${value > 0 ? "+" : ""}${value.toFixed(2)}%`;
+      return `${value.toFixed(2)}%`;
     case "currency":
       return `$${value.toLocaleString()}`;
     case "score":
@@ -31,8 +41,8 @@ function CellValue({
   slug: string;
 }) {
   const val = row.values[slug];
-  const isBest = row.metric.best === slug;
-  const isWorst = row.metric.worst === slug && slug !== row.metric.best;
+  const isBest = row.best === slug;
+  const isWorst = row.worst === slug && slug !== row.best;
 
   return (
     <td
@@ -45,11 +55,13 @@ function CellValue({
       <div className="flex items-center justify-center gap-1.5">
         {isBest && <Trophy className="w-3 h-3 text-emerald-500" />}
         {isWorst && <AlertCircle className="w-3 h-3 text-rose-400" />}
-        {val === null ? <Minus className="w-3 h-3 text-muted-foreground" /> : formatValue(val, row.metric.format)}
+        {val === null ? <Minus className="w-3 h-3 text-muted-foreground" /> : formatValue(val, row.metric.format, row.metric.key)}
       </div>
     </td>
   );
 }
+
+const ECONOMIC_KEYS = new Set(["gdp", "gdpPerCapita", "gdpGrowth", "unemployment", "inflation"]);
 
 export default function ComparisonTable({ matrix }: Props) {
   const { cities, rows } = matrix;
@@ -78,23 +90,47 @@ export default function ComparisonTable({ matrix }: Props) {
             </tr>
           </thead>
           <tbody className="divide-y divide-border/40">
-            {rows.map((row, i) => (
-              <tr
-                key={row.metric.key}
-                className={cn(
-                  "hover:bg-muted/30 transition-colors",
-                  i % 2 === 0 ? "bg-background/50" : "bg-muted/10"
-                )}
-              >
-                <td className="px-4 py-4">
-                  <p className="text-sm font-medium">{row.metric.label}</p>
-                  <p className="text-xs text-muted-foreground">{row.metric.unit}</p>
-                </td>
-                {cities.map((city) => (
-                  <CellValue key={city.slug} row={row} slug={city.slug} />
-                ))}
-              </tr>
-            ))}
+            {rows.map((row, i) => {
+              const isFirstEcon = ECONOMIC_KEYS.has(row.metric.key) && !ECONOMIC_KEYS.has(rows[i - 1]?.metric.key ?? "");
+              return (
+                <Fragment key={row.metric.key}>
+                  {isFirstEcon && (
+                    <tr key="econ-header" className="bg-muted/20">
+                      <td
+                        colSpan={cities.length + 1}
+                        className="px-4 py-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground border-t border-border"
+                      >
+                        Economics
+                      </td>
+                    </tr>
+                  )}
+                  {i === 0 && (
+                    <tr key="pop-header" className="bg-muted/20">
+                      <td
+                        colSpan={cities.length + 1}
+                        className="px-4 py-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground"
+                      >
+                        Population
+                      </td>
+                    </tr>
+                  )}
+                  <tr
+                    className={cn(
+                      "hover:bg-muted/30 transition-colors",
+                      i % 2 === 0 ? "bg-background/50" : "bg-muted/10"
+                    )}
+                  >
+                    <td className="px-4 py-4">
+                      <p className="text-sm font-medium">{row.metric.label}</p>
+                      <p className="text-xs text-muted-foreground">{row.metric.unit}</p>
+                    </td>
+                    {cities.map((city) => (
+                      <CellValue key={city.slug} row={row} slug={city.slug} />
+                    ))}
+                  </tr>
+                </Fragment>
+              );
+            })}
           </tbody>
         </table>
       </div>

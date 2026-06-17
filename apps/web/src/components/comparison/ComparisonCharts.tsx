@@ -1,11 +1,5 @@
 "use client";
 import {
-  RadarChart,
-  Radar,
-  PolarGrid,
-  PolarAngleAxis,
-  PolarRadiusAxis,
-  ResponsiveContainer,
   BarChart,
   Bar,
   Cell,
@@ -13,92 +7,98 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
+  ResponsiveContainer,
 } from "recharts";
 import { motion } from "framer-motion";
-import type { ComparisonMatrix } from "@/types/city";
+import type { ComparisonMatrix, ComparisonRow } from "@/types/city";
 
-// One distinct color per city slot
 const CITY_COLORS = ["#6366f1", "#f43f5e", "#14b8a6", "#f59e0b"];
 
 interface Props {
   matrix: ComparisonMatrix;
 }
 
-// ── Radar chart — transformation scores ──────────────────────────────────────
+function fmtLarge(n: number | null): string {
+  if (n === null) return "—";
+  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(2)}B`;
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
+  return n.toFixed(1);
+}
 
-const SCORE_KEYS = [
-  { label: "Housing\nPressure", dataKey: "housingPressureScore" },
-  { label: "Aging\nSeverity", dataKey: "agingSeverityScore" },
-  { label: "Economic\nDynamism", dataKey: "economicDynamismScore" },
-  { label: "Migration\nPressure", dataKey: "migrationPressureScore" },
-  { label: "Overall\nTransformation", dataKey: "overallTransformationScore" },
-];
+function fmtGdp(v: number): string {
+  if (v >= 1e12) return `$${(v / 1e12).toFixed(2)}T`;
+  if (v >= 1e9) return `$${(v / 1e9).toFixed(1)}B`;
+  return `$${fmtLarge(v)}`;
+}
 
-function RadarComparison({ matrix }: Props) {
-  const { cities } = matrix;
+function yTickFormatter(metricKey: string) {
+  return (v: number) => {
+    if (metricKey === "totalPopulation" || metricKey === "urbanPopulation") return fmtLarge(v);
+    if (metricKey === "urbanPopulationPercent" || metricKey === "gdpGrowth" || metricKey === "unemployment" || metricKey === "inflation") return `${v.toFixed(1)}%`;
+    if (metricKey === "gdp") return fmtGdp(v);
+    if (metricKey === "gdpPerCapita") return `$${(v / 1000).toFixed(0)}K`;
+    return v.toFixed(0);
+  };
+}
 
-  // Build one row per score axis: { subject, CityA, CityB, ... }
-  const radarData = SCORE_KEYS.map(({ label, dataKey }) => {
-    const row: Record<string, string | number> = { subject: label };
-    cities.forEach((city) => {
-      const scoreRow = matrix.rows.find((r) => r.metric.key === dataKey);
-      row[city.name] = scoreRow?.values[city.slug] ?? 0;
-    });
-    return row;
-  });
+function tooltipFormatter(metricKey: string) {
+  return (value: number): [string, string] => {
+    let formatted: string;
+    if (metricKey === "totalPopulation" || metricKey === "urbanPopulation") formatted = fmtLarge(value);
+    else if (metricKey === "urbanPopulationPercent" || metricKey === "gdpGrowth" || metricKey === "unemployment" || metricKey === "inflation") formatted = `${value.toFixed(2)}%`;
+    else if (metricKey === "gdp") formatted = fmtGdp(value);
+    else if (metricKey === "gdpPerCapita") formatted = `$${Math.round(value).toLocaleString()}`;
+    else formatted = value.toFixed(1);
+    return [formatted, ""];
+  };
+}
 
-  // Fall back: build from mock scores if rows don't have score keys
-  const { MOCK_DASHBOARDS } = require("@/lib/data/mockCities");
-  const radarDataFallback = SCORE_KEYS.map(({ label, dataKey }) => {
-    const row: Record<string, string | number> = { subject: label };
-    cities.forEach((city) => {
-      const dash = MOCK_DASHBOARDS[city.slug];
-      const scoreKey = dataKey as keyof typeof dash.scores;
-      row[city.name] = dash?.scores?.[scoreKey] ?? 0;
-    });
-    return row;
-  });
+const POPULATION_KEYS = new Set(["totalPopulation", "populationDensity", "urbanPopulation", "urbanPopulationPercent"]);
+const ECONOMIC_KEYS = new Set(["gdp", "gdpPerCapita", "gdpGrowth", "unemployment", "inflation"]);
 
-  const data = radarDataFallback;
+function MetricBarChart({
+  row,
+  cities,
+}: {
+  row: ComparisonRow;
+  cities: ComparisonMatrix["cities"];
+}) {
+  const chartData = cities.map((city, i) => ({
+    city: city.name,
+    value: row.values[city.slug] ?? 0,
+    fill: CITY_COLORS[i % CITY_COLORS.length],
+    isBest: city.slug === row.best,
+  }));
 
   return (
-    <div className="glass-card rounded-2xl p-6">
-      <h3 className="font-semibold mb-1">Transformation Score Radar</h3>
-      <p className="text-xs text-muted-foreground mb-5">
-        Scores out of 100 — higher means more pressure / dynamism in that dimension.
+    <div className="glass-card rounded-2xl p-5">
+      <h4 className="font-semibold text-sm mb-0.5">{row.metric.label}</h4>
+      <p className="text-xs text-muted-foreground mb-1 font-mono">
+        {row.metric.unit}
       </p>
-      <ResponsiveContainer width="100%" height={460}>
-        <RadarChart data={data} margin={{ top: 64, right: 110, bottom: 64, left: 110 }} outerRadius="50%">
-          <PolarGrid stroke="hsl(var(--border))" strokeOpacity={0.6} />
-          <PolarAngleAxis
-            dataKey="subject"
-            tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))", fontWeight: 500 }}
+      <ResponsiveContainer width="100%" height={180}>
+        <BarChart
+          data={chartData}
+          margin={{ top: 4, right: 8, left: -8, bottom: 0 }}
+        >
+          <CartesianGrid
+            strokeDasharray="3 3"
+            stroke="hsl(var(--border))"
+            strokeOpacity={0.5}
+            vertical={false}
+          />
+          <XAxis
+            dataKey="city"
+            tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+            axisLine={false}
             tickLine={false}
           />
-          <PolarRadiusAxis
-            angle={90}
-            domain={[0, 100]}
-            tick={false}
+          <YAxis
+            tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
             axisLine={false}
-            tickCount={4}
-          />
-          {cities.map((city, i) => (
-            <Radar
-              key={city.slug}
-              name={city.name}
-              dataKey={city.name}
-              stroke={CITY_COLORS[i]}
-              fill={CITY_COLORS[i]}
-              fillOpacity={0.12}
-              strokeWidth={2}
-              dot={{ r: 3, fill: CITY_COLORS[i] }}
-            />
-          ))}
-          <Legend
-            iconType="circle"
-            iconSize={8}
-            wrapperStyle={{ fontSize: "12px", paddingTop: "12px" }}
+            tickLine={false}
+            tickFormatter={yTickFormatter(row.metric.key)}
           />
           <Tooltip
             contentStyle={{
@@ -107,162 +107,89 @@ function RadarComparison({ matrix }: Props) {
               borderRadius: "12px",
               fontSize: "12px",
             }}
-            formatter={(value: number, name: string) => [`${value}/100`, name]}
+            formatter={tooltipFormatter(row.metric.key)}
           />
-        </RadarChart>
+          <Bar dataKey="value" radius={[4, 4, 0, 0]} maxBarSize={48}>
+            {chartData.map((entry) => (
+              <Cell key={entry.city} fill={entry.fill} />
+            ))}
+          </Bar>
+        </BarChart>
       </ResponsiveContainer>
-    </div>
-  );
-}
 
-// ── Grouped bar charts for key numeric metrics ────────────────────────────────
-
-const BAR_METRICS = [
-  {
-    title: "Price-to-Income Ratio",
-    subtitle: "Times annual income needed to buy a home (lower = more affordable)",
-    metricKey: "priceToIncomeRatio",
-    unit: "x",
-    color: CITY_COLORS,
-    higherIsBetter: false,
-  },
-  {
-    title: "GDP per Capita (USD)",
-    subtitle: "Annual economic output per resident",
-    metricKey: "gdpPerCapitaUsd",
-    unit: "$",
-    color: CITY_COLORS,
-    higherIsBetter: true,
-  },
-  {
-    title: "Population Growth Rate",
-    subtitle: "Annual change in total population (%/yr)",
-    metricKey: "growthRate",
-    unit: "%",
-    color: CITY_COLORS,
-    higherIsBetter: true,
-  },
-  {
-    title: "Median Age",
-    subtitle: "Years — reflects aging trajectory",
-    metricKey: "medianAge",
-    unit: " yrs",
-    color: CITY_COLORS,
-    higherIsBetter: false,
-  },
-];
-
-const METRIC_SOURCE: Record<string, (dash: ReturnType<typeof getDash>) => number> = {
-  priceToIncomeRatio: (d) => d?.latestHousing?.priceToIncomeRatio ?? 0,
-  gdpPerCapitaUsd: (d) => d?.latestEconomic?.gdpPerCapitaUsd ?? 0,
-  growthRate: (d) => d?.latestPopulation?.growthRate ?? 0,
-  medianAge: (d) => d?.latestDemographics?.medianAge ?? 0,
-};
-
-function getDash(slug: string) {
-  const { MOCK_DASHBOARDS } = require("@/lib/data/mockCities");
-  return MOCK_DASHBOARDS[slug];
-}
-
-function formatBarValue(value: number, unit: string): string {
-  if (unit === "$") return `$${value.toLocaleString()}`;
-  if (unit === "%") return `${value > 0 ? "+" : ""}${value.toFixed(2)}%`;
-  return `${value.toFixed(1)}${unit}`;
-}
-
-function GroupedBarCharts({ matrix }: Props) {
-  const { cities } = matrix;
-
-  return (
-    <div className="grid md:grid-cols-2 gap-5">
-      {BAR_METRICS.map(({ title, subtitle, metricKey, unit }) => {
-        const chartData = cities.map((city, i) => ({
-          city: city.name,
-          value: METRIC_SOURCE[metricKey](getDash(city.slug)),
-          fill: CITY_COLORS[i],
-        }));
-
-        return (
-          <div key={metricKey} className="glass-card rounded-2xl p-5">
-            <h4 className="font-semibold text-sm mb-0.5">{title}</h4>
-            <p className="text-xs text-muted-foreground mb-4">{subtitle}</p>
-            <ResponsiveContainer width="100%" height={180}>
-              <BarChart
-                data={chartData}
-                margin={{ top: 4, right: 8, left: -8, bottom: 0 }}
-              >
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  stroke="hsl(var(--border))"
-                  strokeOpacity={0.5}
-                  vertical={false}
-                />
-                <XAxis
-                  dataKey="city"
-                  tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis
-                  tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-                  axisLine={false}
-                  tickLine={false}
-                  tickFormatter={(v: number) =>
-                    unit === "$"
-                      ? `$${(v / 1000).toFixed(0)}k`
-                      : `${v.toFixed(0)}${unit}`
-                  }
-                />
-                <Tooltip
-                  contentStyle={{
-                    background: "hsl(var(--card))",
-                    border: "1px solid hsl(var(--border))",
-                    borderRadius: "12px",
-                    fontSize: "12px",
-                  }}
-                  formatter={(value: number) => [
-                    formatBarValue(value, unit),
-                    title,
-                  ]}
-                />
-                <Bar dataKey="value" radius={[4, 4, 0, 0]} maxBarSize={48}>
-                  {chartData.map((entry) => (
-                    <Cell key={entry.city} fill={entry.fill} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-            {/* City color legend */}
-            <div className="flex gap-3 flex-wrap mt-3">
-              {chartData.map((d) => (
-                <div key={d.city} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: d.fill }} />
-                  {d.city}
-                  <span className="font-semibold text-foreground ml-0.5">
-                    {formatBarValue(d.value, unit)}
-                  </span>
-                </div>
-              ))}
-            </div>
+      {/* Per-city value legend */}
+      <div className="flex gap-3 flex-wrap mt-3">
+        {chartData.map((d) => (
+          <div
+            key={d.city}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground"
+          >
+            <span
+              className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
+              style={{ background: d.fill }}
+            />
+            {d.city}
+            <span className="font-semibold text-foreground ml-0.5">
+              {yTickFormatter(row.metric.key)(d.value)}
+            </span>
+            {d.isBest && (
+              <span className="text-emerald-500 font-semibold">★</span>
+            )}
           </div>
-        );
-      })}
+        ))}
+      </div>
     </div>
   );
 }
-
-// ── Main export ───────────────────────────────────────────────────────────────
 
 export default function ComparisonCharts({ matrix }: Props) {
+  const { cities, rows } = matrix;
+  const populationRows = rows.filter((r) => POPULATION_KEYS.has(r.metric.key));
+  const economicRows = rows.filter((r) => ECONOMIC_KEYS.has(r.metric.key));
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.1 }}
-      className="space-y-5"
+      className="space-y-8"
     >
-      <RadarComparison matrix={matrix} />
-      <GroupedBarCharts matrix={matrix} />
+      {/* Source note */}
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <span className="inline-flex items-center gap-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-full px-2.5 py-1 font-medium">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          Live · World Bank Open Data
+        </span>
+        <span>★ = best value for that metric</span>
+      </div>
+
+      {/* Population section */}
+      {populationRows.length > 0 && (
+        <div className="space-y-4">
+          <h3 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
+            Population
+          </h3>
+          <div className="grid md:grid-cols-2 gap-5">
+            {populationRows.map((row) => (
+              <MetricBarChart key={row.metric.key} row={row} cities={cities} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Economic section */}
+      {economicRows.length > 0 && (
+        <div className="space-y-4">
+          <h3 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
+            Economics
+          </h3>
+          <div className="grid md:grid-cols-2 gap-5">
+            {economicRows.map((row) => (
+              <MetricBarChart key={row.metric.key} row={row} cities={cities} />
+            ))}
+          </div>
+        </div>
+      )}
     </motion.div>
   );
 }

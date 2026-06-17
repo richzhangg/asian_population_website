@@ -2,28 +2,26 @@
 import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { TrendingDown, TrendingUp, GitCompareArrows } from "lucide-react";
+import { GitCompareArrows, Database } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { useComparisonStore } from "@/lib/store/comparisonStore";
-import { MOCK_DASHBOARDS } from "@/lib/data/mockCities";
-import { formatPopulation, formatCurrency } from "@/lib/utils/formatters";
+import { formatPopulation } from "@/lib/utils/formatters";
 import type { City } from "@/types/city";
+import type { WorldBankCityData } from "@/types/worldbank";
 import { cn } from "@/lib/utils/cn";
 
 interface Props {
   city: City;
   index?: number;
+  wbData?: WorldBankCityData;
 }
 
-export default function CityCard({ city, index = 0 }: Props) {
+export default function CityCard({ city, index = 0, wbData }: Props) {
   const { add, remove, isSelected, isFull } = useComparisonStore();
-  const dashboard = MOCK_DASHBOARDS[city.slug];
   const selected = isSelected(city.slug);
 
-  const pop = dashboard?.latestPopulation;
-  const econ = dashboard?.latestEconomic;
-  const scores = dashboard?.scores;
+  const pop = wbData?.totalPopulation;
+  const urban = wbData?.urbanPopulationPercent;
 
   return (
     <motion.div
@@ -55,11 +53,17 @@ export default function CityCard({ city, index = 0 }: Props) {
             {/* Badges */}
             <div className="absolute top-3 left-3 flex gap-1.5">
               {city.isMegacity && (
-                <Badge variant="info" className="text-[10px] bg-white/20 text-white border-white/30 backdrop-blur-sm">
+                <Badge
+                  variant="info"
+                  className="text-[10px] bg-white/20 text-white border-white/30 backdrop-blur-sm"
+                >
                   Megacity
                 </Badge>
               )}
-              <Badge variant="outline" className="text-[10px] bg-white/20 text-white border-white/30 backdrop-blur-sm">
+              <Badge
+                variant="outline"
+                className="text-[10px] bg-white/20 text-white border-white/30 backdrop-blur-sm"
+              >
                 Tier {city.cityTier}
               </Badge>
             </div>
@@ -84,54 +88,62 @@ export default function CityCard({ city, index = 0 }: Props) {
             </button>
 
             <div className="absolute bottom-3 left-3">
-              <h3 className="text-white font-bold text-lg leading-none">{city.name}</h3>
+              <h3 className="text-white font-bold text-lg leading-none">
+                {city.name}
+              </h3>
               <p className="text-white/70 text-xs">{city.country}</p>
             </div>
           </div>
 
           {/* Body */}
           <div className="p-4 space-y-3">
-            {/* Key metrics */}
-            <div className="grid grid-cols-2 gap-3">
-              {pop && (
-                <div>
-                  <p className="text-xs text-muted-foreground">Population</p>
-                  <p className="font-bold">{formatPopulation(pop.totalPopulation)}</p>
-                  <div className={cn("flex items-center gap-0.5 text-xs mt-0.5", pop.growthRate >= 0 ? "text-emerald-500" : "text-rose-500")}>
-                    {pop.growthRate >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                    {pop.growthRate > 0 ? "+" : ""}{pop.growthRate.toFixed(2)}%/yr
+            {wbData ? (
+              /* Live World Bank metrics */
+              <div className="grid grid-cols-2 gap-3">
+                {pop?.value != null && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Population</p>
+                    <p className="font-bold tabular-nums">
+                      {formatPopulation(pop.value)}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      {pop.year} · World Bank
+                    </p>
                   </div>
-                </div>
-              )}
-              {econ && (
-                <div>
-                  <p className="text-xs text-muted-foreground">GDP/Capita</p>
-                  <p className="font-bold">{formatCurrency(econ.gdpPerCapitaUsd, 0)}</p>
-                  <div className={cn("flex items-center gap-0.5 text-xs mt-0.5", econ.gdpGrowthRate >= 0 ? "text-emerald-500" : "text-rose-500")}>
-                    {econ.gdpGrowthRate >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                    {econ.gdpGrowthRate > 0 ? "+" : ""}{econ.gdpGrowthRate.toFixed(1)}%/yr
+                )}
+                {urban?.value != null && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Urban %</p>
+                    <p className="font-bold tabular-nums">
+                      {urban.value.toFixed(1)}%
+                    </p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      {urban.year} · SP.URB.TOTL.IN.ZS
+                    </p>
                   </div>
-                </div>
+                )}
+              </div>
+            ) : (
+              /* No WB data — show city description */
+              <p className="text-xs text-muted-foreground line-clamp-2">
+                {city.description}
+              </p>
+            )}
+
+            {/* Live data indicator */}
+            <div className="flex items-center gap-1.5">
+              {wbData ? (
+                <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Live · World Bank
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                  <Database className="w-3 h-3" />
+                  Data coming soon
+                </span>
               )}
             </div>
-
-            {/* Transformation score bar */}
-            {scores && (
-              <div>
-                <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                  <span>Transformation Score</span>
-                  <span className="font-semibold text-foreground">{scores.overallTransformationScore}/100</span>
-                </div>
-                <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${scores.overallTransformationScore}%` }}
-                    transition={{ duration: 0.8, delay: 0.2 }}
-                    className="h-full rounded-full bg-gradient-to-r from-blue-500 to-indigo-600"
-                  />
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </Link>

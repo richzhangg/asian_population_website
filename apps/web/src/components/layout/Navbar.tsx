@@ -44,7 +44,7 @@ export default function Navbar() {
         scrolled ? "glass-card shadow-sm py-2" : "bg-transparent py-4"
       )}
     >
-      <nav className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between">
+      <nav className="max-w-7xl mx-auto px-4 sm:px-6 grid grid-cols-3 items-center">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2.5 group">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/25 group-hover:scale-105 transition-transform">
@@ -58,8 +58,8 @@ export default function Navbar() {
           </div>
         </Link>
 
-        {/* Desktop Nav */}
-        <ul className="hidden md:flex items-center gap-1">
+        {/* Desktop Nav — truly centered */}
+        <ul className="hidden md:flex items-center justify-center gap-1">
           {NAV_LINKS.map(({ href, label, icon: Icon }) => {
             const active = pathname.startsWith(href);
             return (
@@ -87,7 +87,7 @@ export default function Navbar() {
         </ul>
 
         {/* Right controls */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 justify-end">
           <Button
             variant="ghost"
             size="icon"

@@ -6,7 +6,9 @@ import ComparisonSelector from "@/components/comparison/ComparisonSelector";
 import ComparisonTable from "@/components/comparison/ComparisonTable";
 import ComparisonCharts from "@/components/comparison/ComparisonCharts";
 import { useComparisonStore } from "@/lib/store/comparisonStore";
+import { useYearRangeStore } from "@/lib/store/yearRangeStore";
 import { getComparisonMatrix } from "@/lib/api/cities";
+import YearRangePicker from "@/components/ui/YearRangePicker";
 import useSWR from "swr";
 import { cn } from "@/lib/utils/cn";
 
@@ -15,12 +17,15 @@ type Tab = "charts" | "table";
 export default function ComparePage() {
   const selected = useComparisonStore((s) => s.selected);
   const slugs = selected.map((c) => c.slug);
-  const key = slugs.length >= 2 ? `compare-${slugs.join("-")}` : null;
   const [activeTab, setActiveTab] = useState<Tab>("charts");
+  const { startYear, endYear } = useYearRangeStore();
+  const dateRange = startYear !== null && endYear !== null ? { start: startYear, end: endYear } : undefined;
+  const rangeKey = startYear ?? "latest";
+  const key = slugs.length >= 2 ? `compare-${slugs.join("-")}-${rangeKey}-${endYear ?? "latest"}` : null;
 
   const { data: matrix, isLoading } = useSWR(
     key,
-    () => getComparisonMatrix(slugs),
+    () => getComparisonMatrix(slugs, dateRange),
     { revalidateOnFocus: false }
   );
 
@@ -38,6 +43,11 @@ export default function ComparePage() {
         <p className="text-muted-foreground max-w-xl">
           Select 2–4 Asian cities to compare side-by-side across housing, demographics, and economic metrics — visualised as charts and a data table.
         </p>
+      </div>
+
+      {/* Year range picker */}
+      <div className="glass-card rounded-xl px-4 py-3">
+        <YearRangePicker />
       </div>
 
       {/* City selector */}

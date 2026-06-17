@@ -10,6 +10,7 @@ export interface City {
   isMegacity: boolean;
   cityTier: 1 | 2 | 3;
   description: string;
+  summary?: string;
   thumbnailUrl?: string;
 }
 
