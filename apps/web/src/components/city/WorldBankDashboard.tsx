@@ -19,6 +19,7 @@ import {
   ArrowDownRight,
   Briefcase,
 } from "lucide-react";
+import DownloadPDFButton from "@/components/ui/DownloadPDFButton";
 import {
   AreaChart,
   Area,
@@ -710,6 +711,7 @@ export default function WorldBankDashboard({ city, wbData: initialData }: Props)
             View Full Profile on World Bank
           </Button>
         </a>
+        <DownloadPDFButton mode="city" city={city} wbData={wbData} />
       </motion.div>
     </div>
   );

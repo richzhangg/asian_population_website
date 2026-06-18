@@ -9,8 +9,10 @@ import { useComparisonStore } from "@/lib/store/comparisonStore";
 import { useYearRangeStore } from "@/lib/store/yearRangeStore";
 import { getComparisonMatrix } from "@/lib/api/cities";
 import YearRangePicker from "@/components/ui/YearRangePicker";
+import { MIN_YEAR, MAX_YEAR } from "@/lib/store/yearRangeStore";
 import useSWR from "swr";
 import { cn } from "@/lib/utils/cn";
+import DownloadPDFButton from "@/components/ui/DownloadPDFButton";
 
 type Tab = "charts" | "table";
 
@@ -81,7 +83,8 @@ export default function ComparePage() {
         </div>
       ) : matrix ? (
         <div className="space-y-5">
-          {/* Tab switcher */}
+          {/* Tab switcher + PDF download */}
+          <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-1 p-1 glass-card rounded-xl w-fit">
             {([
               { id: "charts" as Tab, label: "Charts", icon: BarChart3 },
@@ -101,6 +104,12 @@ export default function ComparePage() {
                 {label}
               </button>
             ))}
+          </div>
+          <DownloadPDFButton
+            mode="compare"
+            matrix={matrix}
+            yearRange={{ start: startYear ?? 2009, end: endYear ?? MAX_YEAR }}
+          />
           </div>
 
           {/* Content */}
