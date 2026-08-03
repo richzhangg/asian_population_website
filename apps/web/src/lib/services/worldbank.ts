@@ -149,16 +149,6 @@ async function fetchPopulationHistory(
   return fetchHistory(countryCode, WB_INDICATORS.TOTAL_POPULATION, dateRange);
 }
 
-async function fetchGdpHistory(
-  countryCode: string,
-  dateRange?: DateRange
-): Promise<Array<{ year: number; value: number }>> {
-  if (!dateRange) {
-    // Fetch a wide default range so the client can filter without re-fetching
-    return fetchHistory(countryCode, WB_INDICATORS.GDP, { start: 1990, end: 2026 });
-  }
-  return fetchHistory(countryCode, WB_INDICATORS.GDP, dateRange);
-}
 
 // ── Economic fetch (sequential to avoid WB rate-limiting) ────────────────────
 
@@ -175,21 +165,38 @@ function historyToLatest(
   return { indicatorId, indicatorName, value: latest?.value ?? null, year: latest?.year ?? null };
 }
 
+async function fetchHistoryMRV(
+  countryCode: string,
+  indicatorId: string,
+  mrv = 35
+): Promise<Array<{ year: number; value: number }>> {
+  const url = `${WB_BASE}/country/${countryCode}/indicator/${indicatorId}?format=json&mrv=${mrv}&per_page=${mrv}`;
+  try {
+    const res = await wbFetch(url);
+    if (!res.ok) return [];
+    const raw = (await res.json()) as WBApiResponse;
+    return (raw[1] ?? [])
+      .filter((e): e is WBEntry & { value: number } => e.value !== null)
+      .map((e) => ({ year: parseInt(e.date, 10), value: e.value }))
+      .sort((a, b) => a.year - b.year);
+  } catch {
+    return [];
+  }
+}
+
 async function fetchAllEconomicData(
   countryCode: string,
 ): Promise<WorldBankEconomicData> {
-  // Always fetch the full historical range so the client can filter without re-fetching
-  const fullRange: DateRange = { start: 1990, end: 2026 };
-
-  const gdpHistory = await fetchHistory(countryCode, WB_INDICATORS.GDP, fullRange);
-  await delay(200);
-  const gdpPerCapitaHistory = await fetchHistory(countryCode, WB_INDICATORS.GDP_PER_CAPITA, fullRange);
-  await delay(200);
-  const gdpGrowthHistory = await fetchHistory(countryCode, WB_INDICATORS.GDP_GROWTH, fullRange);
-  await delay(200);
-  const unemploymentHistory = await fetchHistory(countryCode, WB_INDICATORS.UNEMPLOYMENT, fullRange);
-  await delay(200);
-  const inflationHistory = await fetchHistory(countryCode, WB_INDICATORS.INFLATION, fullRange);
+  // Use mrv=35 (most recent 35 years) — more reliable than date ranges on the WB API
+  const gdpHistory = await fetchHistoryMRV(countryCode, WB_INDICATORS.GDP);
+  await delay(350);
+  const gdpPerCapitaHistory = await fetchHistoryMRV(countryCode, WB_INDICATORS.GDP_PER_CAPITA);
+  await delay(350);
+  const gdpGrowthHistory = await fetchHistoryMRV(countryCode, WB_INDICATORS.GDP_GROWTH);
+  await delay(350);
+  const unemploymentHistory = await fetchHistoryMRV(countryCode, WB_INDICATORS.UNEMPLOYMENT);
+  await delay(350);
+  const inflationHistory = await fetchHistoryMRV(countryCode, WB_INDICATORS.INFLATION);
 
   return {
     gdp: historyToLatest(gdpHistory, WB_INDICATORS.GDP, "GDP (current US$)"),
