@@ -1,6 +1,5 @@
 "use client";
 import { useState } from "react";
-import useSWR from "swr";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import Link from "next/link";
@@ -34,11 +33,6 @@ import { Button } from "@/components/ui/button";
 import type { City } from "@/types/city";
 import type { WorldBankCityData, WorldBankEconomicData, WorldBankIndicatorValue } from "@/types/worldbank";
 
-async function fetchCityDataFromAPI(slug: string, start: number, end: number): Promise<WorldBankCityData> {
-  const res = await fetch(`/api/city-data?slug=${slug}&start=${start}&end=${end}`);
-  if (!res.ok) throw new Error(`Failed to fetch city data: ${res.status}`);
-  return res.json() as Promise<WorldBankCityData>;
-}
 import { useYearRangeStore } from "@/lib/store/yearRangeStore";
 import YearRangePicker from "@/components/ui/YearRangePicker";
 
@@ -431,18 +425,21 @@ function SummaryModal({
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function WorldBankDashboard({ city, wbData: initialData }: Props) {
+export default function WorldBankDashboard({ city, wbData }: Props) {
   const [summaryOpen, setSummaryOpen] = useState(false);
   const { startYear, endYear } = useYearRangeStore();
   const hasCustomRange = startYear !== null && endYear !== null;
 
-  const { data: freshData, isLoading: isRefreshing } = useSWR(
-    hasCustomRange ? `wb-city-${city.slug}-${startYear}-${endYear}` : null,
-    () => fetchCityDataFromAPI(city.slug, startYear!, endYear!),
-    { revalidateOnFocus: false }
-  );
+  // Filter history arrays client-side — no re-fetch needed when year changes
+  const populationHistory = hasCustomRange
+    ? wbData.populationHistory.filter(p => p.year >= startYear! && p.year <= endYear!)
+    : wbData.populationHistory;
 
-  const wbData = freshData ?? initialData;
+  const gdpHistory = hasCustomRange
+    ? wbData.economicData.gdpHistory.filter(p => p.year >= startYear! && p.year <= endYear!)
+    : wbData.economicData.gdpHistory;
+
+  const economicData = { ...wbData.economicData, gdpHistory };
 
   const {
     countryName,
@@ -451,8 +448,6 @@ export default function WorldBankDashboard({ city, wbData: initialData }: Props)
     populationDensity,
     urbanPopulation,
     urbanPopulationPercent,
-    populationHistory,
-    economicData,
     fetchedAt,
   } = wbData;
 
@@ -556,8 +551,8 @@ export default function WorldBankDashboard({ city, wbData: initialData }: Props)
       >
         <div className="flex flex-wrap items-center gap-3 text-sm">
           <span className="inline-flex items-center gap-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-full px-3 py-1 font-medium text-xs">
-            <span className={`w-1.5 h-1.5 rounded-full bg-emerald-500 ${isRefreshing ? "animate-ping" : "animate-pulse"}`} />
-            {isRefreshing ? "Fetching…" : "UN WUP 2022 · World Bank"}
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            UN WUP 2022 · World Bank
           </span>
           <span className="text-muted-foreground text-xs">
             City-level data for {city.name} · fetched{" "}

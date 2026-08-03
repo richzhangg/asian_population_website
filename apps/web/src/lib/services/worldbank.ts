@@ -153,6 +153,10 @@ async function fetchGdpHistory(
   countryCode: string,
   dateRange?: DateRange
 ): Promise<Array<{ year: number; value: number }>> {
+  if (!dateRange) {
+    // Fetch a wide default range so the client can filter without re-fetching
+    return fetchHistory(countryCode, WB_INDICATORS.GDP, { start: 1990, end: 2026 });
+  }
   return fetchHistory(countryCode, WB_INDICATORS.GDP, dateRange);
 }
 
