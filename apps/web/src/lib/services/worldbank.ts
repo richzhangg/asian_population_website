@@ -166,29 +166,42 @@ function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function historyToLatest(
+  history: Array<{ year: number; value: number }>,
+  indicatorId: string,
+  indicatorName: string
+): WorldBankIndicatorValue {
+  const latest = history[history.length - 1];
+  return { indicatorId, indicatorName, value: latest?.value ?? null, year: latest?.year ?? null };
+}
+
 async function fetchAllEconomicData(
   countryCode: string,
-  dateRange?: DateRange
 ): Promise<WorldBankEconomicData> {
-  const gdpResult = await fetchIndicator(countryCode, WB_INDICATORS.GDP, dateRange);
+  // Always fetch the full historical range so the client can filter without re-fetching
+  const fullRange: DateRange = { start: 1990, end: 2026 };
+
+  const gdpHistory = await fetchHistory(countryCode, WB_INDICATORS.GDP, fullRange);
   await delay(200);
-  const gdpPerCapitaResult = await fetchIndicator(countryCode, WB_INDICATORS.GDP_PER_CAPITA, dateRange);
+  const gdpPerCapitaHistory = await fetchHistory(countryCode, WB_INDICATORS.GDP_PER_CAPITA, fullRange);
   await delay(200);
-  const gdpGrowthResult = await fetchIndicator(countryCode, WB_INDICATORS.GDP_GROWTH, dateRange);
+  const gdpGrowthHistory = await fetchHistory(countryCode, WB_INDICATORS.GDP_GROWTH, fullRange);
   await delay(200);
-  const unemploymentResult = await fetchIndicator(countryCode, WB_INDICATORS.UNEMPLOYMENT, dateRange);
+  const unemploymentHistory = await fetchHistory(countryCode, WB_INDICATORS.UNEMPLOYMENT, fullRange);
   await delay(200);
-  const inflationResult = await fetchIndicator(countryCode, WB_INDICATORS.INFLATION, dateRange);
-  await delay(200);
-  const gdpHistory = await fetchGdpHistory(countryCode, dateRange);
+  const inflationHistory = await fetchHistory(countryCode, WB_INDICATORS.INFLATION, fullRange);
 
   return {
-    gdp: gdpResult.data,
-    gdpPerCapita: gdpPerCapitaResult.data,
-    gdpGrowth: gdpGrowthResult.data,
-    unemployment: unemploymentResult.data,
-    inflation: inflationResult.data,
+    gdp: historyToLatest(gdpHistory, WB_INDICATORS.GDP, "GDP (current US$)"),
+    gdpPerCapita: historyToLatest(gdpPerCapitaHistory, WB_INDICATORS.GDP_PER_CAPITA, "GDP per capita (current US$)"),
+    gdpGrowth: historyToLatest(gdpGrowthHistory, WB_INDICATORS.GDP_GROWTH, "GDP growth (annual %)"),
+    unemployment: historyToLatest(unemploymentHistory, WB_INDICATORS.UNEMPLOYMENT, "Unemployment, total (% of total labor force)"),
+    inflation: historyToLatest(inflationHistory, WB_INDICATORS.INFLATION, "Inflation, consumer prices (annual %)"),
     gdpHistory,
+    gdpPerCapitaHistory,
+    gdpGrowthHistory,
+    unemploymentHistory,
+    inflationHistory,
   };
 }
 
@@ -256,8 +269,7 @@ export async function fetchCityWorldBankData(
     year: latestPop?.year ?? null,
   };
 
-  // Fetch all economic indicators in ONE request to avoid rate-limiting
-  const economicData = await fetchAllEconomicData(countryCode, dateRange);
+  const economicData = await fetchAllEconomicData(countryCode);
 
   return {
     citySlug,

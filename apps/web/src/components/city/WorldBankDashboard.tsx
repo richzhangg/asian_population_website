@@ -435,11 +435,36 @@ export default function WorldBankDashboard({ city, wbData }: Props) {
     ? wbData.populationHistory.filter(p => p.year >= startYear! && p.year <= endYear!)
     : wbData.populationHistory;
 
-  const gdpHistory = hasCustomRange
-    ? wbData.economicData.gdpHistory.filter(p => p.year >= startYear! && p.year <= endYear!)
-    : wbData.economicData.gdpHistory;
+  function filterEco(arr: Array<{ year: number; value: number }>) {
+    return hasCustomRange ? arr.filter(p => p.year >= startYear! && p.year <= endYear!) : arr;
+  }
 
-  const economicData = { ...wbData.economicData, gdpHistory };
+  function latestFromHistory(
+    history: Array<{ year: number; value: number }>,
+    base: typeof wbData.economicData.gdp
+  ) {
+    const last = history[history.length - 1];
+    return last ? { ...base, value: last.value, year: last.year } : base;
+  }
+
+  const gdpHistory = filterEco(wbData.economicData.gdpHistory);
+  const gdpPerCapitaHistory = filterEco(wbData.economicData.gdpPerCapitaHistory);
+  const gdpGrowthHistory = filterEco(wbData.economicData.gdpGrowthHistory);
+  const unemploymentHistory = filterEco(wbData.economicData.unemploymentHistory);
+  const inflationHistory = filterEco(wbData.economicData.inflationHistory);
+
+  const economicData = {
+    gdp: latestFromHistory(gdpHistory, wbData.economicData.gdp),
+    gdpPerCapita: latestFromHistory(gdpPerCapitaHistory, wbData.economicData.gdpPerCapita),
+    gdpGrowth: latestFromHistory(gdpGrowthHistory, wbData.economicData.gdpGrowth),
+    unemployment: latestFromHistory(unemploymentHistory, wbData.economicData.unemployment),
+    inflation: latestFromHistory(inflationHistory, wbData.economicData.inflation),
+    gdpHistory,
+    gdpPerCapitaHistory,
+    gdpGrowthHistory,
+    unemploymentHistory,
+    inflationHistory,
+  };
 
   // Derive population indicator cards from filtered history (reflects selected end year)
   const latestPop = populationHistory[populationHistory.length - 1];

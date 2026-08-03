@@ -12,6 +12,10 @@ export interface WorldBankEconomicData {
   unemployment: WorldBankIndicatorValue;
   inflation: WorldBankIndicatorValue;
   gdpHistory: Array<{ year: number; value: number }>;
+  gdpPerCapitaHistory: Array<{ year: number; value: number }>;
+  gdpGrowthHistory: Array<{ year: number; value: number }>;
+  unemploymentHistory: Array<{ year: number; value: number }>;
+  inflationHistory: Array<{ year: number; value: number }>;
 }
 
 export interface WorldBankCityData {
