@@ -33,7 +33,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { City } from "@/types/city";
 import type { WorldBankCityData, WorldBankEconomicData, WorldBankIndicatorValue } from "@/types/worldbank";
-import { fetchCityWorldBankData } from "@/lib/services/worldbank";
+
+async function fetchCityDataFromAPI(slug: string, start: number, end: number): Promise<WorldBankCityData> {
+  const res = await fetch(`/api/city-data?slug=${slug}&start=${start}&end=${end}`);
+  if (!res.ok) throw new Error(`Failed to fetch city data: ${res.status}`);
+  return res.json() as Promise<WorldBankCityData>;
+}
 import { useYearRangeStore } from "@/lib/store/yearRangeStore";
 import YearRangePicker from "@/components/ui/YearRangePicker";
 
@@ -433,7 +438,7 @@ export default function WorldBankDashboard({ city, wbData: initialData }: Props)
 
   const { data: freshData, isLoading: isRefreshing } = useSWR(
     hasCustomRange ? `wb-city-${city.slug}-${startYear}-${endYear}` : null,
-    () => fetchCityWorldBankData(city.slug, city.name, { start: startYear!, end: endYear! }),
+    () => fetchCityDataFromAPI(city.slug, startYear!, endYear!),
     { revalidateOnFocus: false }
   );
 
@@ -534,9 +539,9 @@ export default function WorldBankDashboard({ city, wbData: initialData }: Props)
             )}
             <Badge
               variant="outline"
-              className="bg-white/20 text-white border-white/30 backdrop-blur-sm font-mono text-xs"
+              className="bg-white/20 text-white border-white/30 backdrop-blur-sm text-xs"
             >
-              {countryCode}
+              Urban Agglomeration
             </Badge>
           </div>
         </div>
@@ -552,10 +557,10 @@ export default function WorldBankDashboard({ city, wbData: initialData }: Props)
         <div className="flex flex-wrap items-center gap-3 text-sm">
           <span className="inline-flex items-center gap-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-full px-3 py-1 font-medium text-xs">
             <span className={`w-1.5 h-1.5 rounded-full bg-emerald-500 ${isRefreshing ? "animate-ping" : "animate-pulse"}`} />
-            {isRefreshing ? "Fetching…" : "Live · World Bank Open Data"}
+            {isRefreshing ? "Fetching…" : "UN WUP 2022 · World Bank"}
           </span>
           <span className="text-muted-foreground text-xs">
-            Country-level data for {countryName} · fetched{" "}
+            City-level data for {city.name} · fetched{" "}
             {new Date(fetchedAt).toLocaleDateString("en-US", {
               month: "short",
               day: "numeric",
@@ -563,12 +568,12 @@ export default function WorldBankDashboard({ city, wbData: initialData }: Props)
             })}
           </span>
           <a
-            href="https://data.worldbank.org"
+            href="https://population.un.org/wup/"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
           >
-            data.worldbank.org
+            UN World Urbanization Prospects
             <ExternalLink className="w-3 h-3" />
           </a>
           {city.summary && (
@@ -668,17 +673,18 @@ export default function WorldBankDashboard({ city, wbData: initialData }: Props)
 
         <div className="pt-2 border-t border-border grid sm:grid-cols-2 gap-3 text-xs text-muted-foreground">
           <p>
-            <span className="font-medium text-foreground">Source:</span>{" "}
-            World Bank Open Data
+            <span className="font-medium text-foreground">Population source:</span>{" "}
+            UN World Urbanization Prospects 2022
           </p>
           <p>
-            <span className="font-medium text-foreground">Country:</span>{" "}
-            {countryName} ({countryCode})
+            <span className="font-medium text-foreground">Economics source:</span>{" "}
+            World Bank Open Data ({countryCode})
           </p>
           <p>
             <span className="font-medium text-foreground">Note:</span>{" "}
-            {city.name} is represented by {countryName} national statistics —
-            the World Bank API provides country-level data.
+            Population figures are city/agglomeration level from UN World
+            Urbanization Prospects 2022. Economic indicators (GDP, unemployment,
+            inflation) are country-level from the World Bank.
           </p>
           <p>
             <span className="font-medium text-foreground">Update cycle:</span>{" "}
@@ -701,14 +707,14 @@ export default function WorldBankDashboard({ city, wbData: initialData }: Props)
           </Button>
         </Link>
         <a
-          href={`https://data.worldbank.org/country/${countryCode}`}
+          href="https://population.un.org/wup/"
           target="_blank"
           rel="noopener noreferrer"
           className="flex-1"
         >
           <Button variant="outline" className="w-full gap-2">
             <ExternalLink className="w-4 h-4" />
-            View Full Profile on World Bank
+            View UN World Urbanization Prospects
           </Button>
         </a>
         <DownloadPDFButton mode="city" city={city} wbData={wbData} />

@@ -5,6 +5,7 @@ import type {
   WorldBankHomeStat,
   WorldBankHeroStat,
 } from "@/types/worldbank";
+import { UN_WUP, interpolateAnnual, getPopAtYear } from "@/lib/data/unwupData";
 
 const WB_BASE = "https://api.worldbank.org/v2";
 
@@ -67,6 +68,23 @@ function buildDateParam(dateRange?: DateRange): { dateParam: string; perPage: nu
   return { dateParam: "mrv=10", perPage: 10 };
 }
 
+async function wbFetch(url: string): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 12000);
+  try {
+    const res = await fetch(url, {
+      signal: controller.signal,
+      next: { revalidate: 86400 },
+      headers: { Accept: "application/json" },
+    });
+    clearTimeout(timer);
+    return res;
+  } catch (err) {
+    clearTimeout(timer);
+    throw err;
+  }
+}
+
 async function fetchIndicator(
   countryCode: string,
   indicatorId: string,
@@ -75,10 +93,7 @@ async function fetchIndicator(
   const { dateParam, perPage } = buildDateParam(dateRange);
   const url = `${WB_BASE}/country/${countryCode}/indicator/${indicatorId}?format=json&${dateParam}&per_page=${perPage}`;
 
-  const res = await fetch(url, {
-    next: { revalidate: 86400 },
-    headers: { Accept: "application/json" },
-  });
+  const res = await wbFetch(url);
 
   if (!res.ok) {
     throw new Error(
@@ -114,10 +129,7 @@ async function fetchHistory(
   const url = `${WB_BASE}/country/${countryCode}/indicator/${indicatorId}?format=json&${dateParamFinal}&per_page=${perPage}`;
 
   try {
-    const res = await fetch(url, {
-      next: { revalidate: 86400 },
-      headers: { Accept: "application/json" },
-    });
+    const res = await wbFetch(url);
     if (!res.ok) return [];
 
     const raw = (await res.json()) as WBApiResponse;
@@ -144,49 +156,29 @@ async function fetchGdpHistory(
   return fetchHistory(countryCode, WB_INDICATORS.GDP, dateRange);
 }
 
-// ── Public API ────────────────────────────────────────────────────────────────
+// ── Economic fetch (sequential to avoid WB rate-limiting) ────────────────────
 
-/**
- * Fetch all four World Bank indicators + population history for a single city.
- * Throws if the city slug has no WB country code mapping.
- */
-export async function fetchCityWorldBankData(
-  citySlug: string,
-  cityName: string,
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchAllEconomicData(
+  countryCode: string,
   dateRange?: DateRange
-): Promise<WorldBankCityData> {
-  const countryCode = CITY_COUNTRY_MAP[citySlug];
-  if (!countryCode) {
-    throw new Error(`No World Bank country mapping for city: ${citySlug}`);
-  }
+): Promise<WorldBankEconomicData> {
+  const gdpResult = await fetchIndicator(countryCode, WB_INDICATORS.GDP, dateRange);
+  await delay(200);
+  const gdpPerCapitaResult = await fetchIndicator(countryCode, WB_INDICATORS.GDP_PER_CAPITA, dateRange);
+  await delay(200);
+  const gdpGrowthResult = await fetchIndicator(countryCode, WB_INDICATORS.GDP_GROWTH, dateRange);
+  await delay(200);
+  const unemploymentResult = await fetchIndicator(countryCode, WB_INDICATORS.UNEMPLOYMENT, dateRange);
+  await delay(200);
+  const inflationResult = await fetchIndicator(countryCode, WB_INDICATORS.INFLATION, dateRange);
+  await delay(200);
+  const gdpHistory = await fetchGdpHistory(countryCode, dateRange);
 
-  const [
-    popResult,
-    densityResult,
-    urbanResult,
-    urbanPctResult,
-    history,
-    gdpResult,
-    gdpPerCapitaResult,
-    gdpGrowthResult,
-    unemploymentResult,
-    inflationResult,
-    gdpHistory,
-  ] = await Promise.all([
-    fetchIndicator(countryCode, WB_INDICATORS.TOTAL_POPULATION, dateRange),
-    fetchIndicator(countryCode, WB_INDICATORS.POPULATION_DENSITY, dateRange),
-    fetchIndicator(countryCode, WB_INDICATORS.URBAN_POPULATION, dateRange),
-    fetchIndicator(countryCode, WB_INDICATORS.URBAN_POPULATION_PCT, dateRange),
-    fetchPopulationHistory(countryCode, dateRange),
-    fetchIndicator(countryCode, WB_INDICATORS.GDP, dateRange),
-    fetchIndicator(countryCode, WB_INDICATORS.GDP_PER_CAPITA, dateRange),
-    fetchIndicator(countryCode, WB_INDICATORS.GDP_GROWTH, dateRange),
-    fetchIndicator(countryCode, WB_INDICATORS.UNEMPLOYMENT, dateRange),
-    fetchIndicator(countryCode, WB_INDICATORS.INFLATION, dateRange),
-    fetchGdpHistory(countryCode, dateRange),
-  ]);
-
-  const economicData: WorldBankEconomicData = {
+  return {
     gdp: gdpResult.data,
     gdpPerCapita: gdpPerCapitaResult.data,
     gdpGrowth: gdpGrowthResult.data,
@@ -194,17 +186,85 @@ export async function fetchCityWorldBankData(
     inflation: inflationResult.data,
     gdpHistory,
   };
+}
+
+// ── Public API ────────────────────────────────────────────────────────────────
+
+/**
+ * Fetch city data using UN WUP (city-level population) + World Bank (economics).
+ * Population figures are city/agglomeration level from UN WUP 2022.
+ * Economic indicators (GDP, unemployment, inflation) remain country-level from World Bank.
+ */
+export async function fetchCityWorldBankData(
+  citySlug: string,
+  cityName: string,
+  dateRange?: DateRange
+): Promise<WorldBankCityData> {
+  const wup = UN_WUP[citySlug];
+  const countryCode = wup?.countryCode ?? CITY_COUNTRY_MAP[citySlug];
+  if (!countryCode) {
+    throw new Error(`No data mapping for city: ${citySlug}`);
+  }
+  if (!wup) {
+    throw new Error(`No UN WUP data for city: ${citySlug}`);
+  }
+
+  // Build annual population series from UN WUP anchor points
+  const startY = dateRange?.start ?? 1990;
+  const endY = dateRange?.end ?? 2025;
+  const annualPop = interpolateAnnual(wup.populationSeries, Math.min(startY, 1990), Math.max(endY, 2025));
+
+  // Filter to requested range for history
+  const popHistory = annualPop.filter((p) => p.year >= startY && p.year <= endY);
+
+  // Pick the most recent population value within the requested range
+  const latestPop = getPopAtYear(annualPop, endY);
+
+  const totalPopulation: WorldBankIndicatorValue = {
+    indicatorId: "UN.WUP.URBAN.AGGL",
+    indicatorName: "Population of Urban Agglomeration (UN WUP 2022)",
+    value: latestPop?.value ?? null,
+    year: latestPop?.year ?? null,
+  };
+
+  // Density = population / area
+  const densityValue = latestPop && wup.areaSqKm
+    ? latestPop.value / wup.areaSqKm
+    : null;
+  const populationDensity: WorldBankIndicatorValue = {
+    indicatorId: "UN.WUP.DENSITY",
+    indicatorName: "Population Density (UN WUP 2022)",
+    value: densityValue,
+    year: latestPop?.year ?? null,
+  };
+
+  // Urban agglomerations are fully urban by definition
+  const urbanPopulation: WorldBankIndicatorValue = {
+    indicatorId: "UN.WUP.URBAN.POP",
+    indicatorName: "Urban Population (UN WUP 2022)",
+    value: latestPop?.value ?? null,
+    year: latestPop?.year ?? null,
+  };
+  const urbanPopulationPercent: WorldBankIndicatorValue = {
+    indicatorId: "UN.WUP.URBAN.PCT",
+    indicatorName: "Urban Population % (Urban Agglomeration)",
+    value: 100,
+    year: latestPop?.year ?? null,
+  };
+
+  // Fetch all economic indicators in ONE request to avoid rate-limiting
+  const economicData = await fetchAllEconomicData(countryCode, dateRange);
 
   return {
     citySlug,
     cityName,
     countryCode,
-    countryName: popResult.countryName,
-    totalPopulation: popResult.data,
-    populationDensity: densityResult.data,
-    urbanPopulation: urbanResult.data,
-    urbanPopulationPercent: urbanPctResult.data,
-    populationHistory: history,
+    countryName: wup.agglomerationName,
+    totalPopulation,
+    populationDensity,
+    urbanPopulation,
+    urbanPopulationPercent,
+    populationHistory: popHistory,
     economicData,
     fetchedAt: new Date().toISOString(),
   };
@@ -275,46 +335,46 @@ export async function fetchHomeStats(): Promise<WorldBankHomeStat[]> {
 
   return [
     {
-      label: "People Across 4 Tracked Economies",
-      sub: "Japan · South Korea · China · Hong Kong",
+      label: "People Across 4 Tracked Cities",
+      sub: "Tokyo · Seoul · Shanghai · Hong Kong",
       value: totalPop / 1_000_000_000,
       suffix: "B",
       decimals: 2,
     },
     {
-      label: "Hong Kong Urbanization Rate",
-      sub: "Most urbanized economy tracked",
-      value: hkgUrban,
-      suffix: "%",
+      label: "Hong Kong Population Density",
+      sub: "People per km² (urban agglomeration)",
+      value: hkgDensity,
+      suffix: "/km²",
+      decimals: 0,
+    },
+    {
+      label: "Shanghai Urban Population",
+      sub: "Largest tracked city agglomeration",
+      value: chnPop / 1_000_000,
+      suffix: "M",
       decimals: 1,
     },
     {
-      label: "China Total Population",
-      sub: "Largest economy tracked",
-      value: chnPop / 1_000_000_000,
-      suffix: "B",
-      decimals: 2,
-    },
-    {
-      label: "Japan Population Density",
-      sub: "People per km² of land area",
+      label: "Tokyo Population Density",
+      sub: "People per km² (Tokyo Metropolis)",
       value: jpnDensity,
       suffix: "/km²",
       decimals: 0,
     },
     {
-      label: "South Korea Urban Population",
-      sub: "Share of total population",
+      label: "Seoul City Population",
+      sub: "Seoul Special Metropolitan City",
       value: korUrban,
       suffix: "%",
       decimals: 1,
     },
     {
-      label: "Hong Kong Population Density",
-      sub: "People per km² of land area",
-      value: hkgDensity,
-      suffix: "/km²",
-      decimals: 0,
+      label: "Tokyo Urban Agglomeration",
+      sub: "World's largest urban agglomeration",
+      value: (bySlug["tokyo"]?.totalPopulation.value ?? 37_000_000) / 1_000_000,
+      suffix: "M",
+      decimals: 1,
     },
   ];
 }
@@ -347,15 +407,15 @@ export async function fetchHeroStats(): Promise<WorldBankHeroStat[]> {
 
   return [
     {
-      label: `Japan Population (${jpnPop?.year ?? "latest"})`,
+      label: `Tokyo Agglomeration (${jpnPop?.year ?? "latest"})`,
       value: fmt(jpnPop?.value ?? null),
     },
     {
-      label: `South Korea Urban % (${korUrban?.year ?? "latest"})`,
-      value: korUrban?.value != null ? `${korUrban.value.toFixed(1)}%` : "N/A",
+      label: `Seoul City (${korUrban?.year ?? "latest"})`,
+      value: fmt(korUrban?.value ?? null),
     },
     {
-      label: `China Population (${chnPop?.year ?? "latest"})`,
+      label: `Shanghai Agglomeration (${chnPop?.year ?? "latest"})`,
       value: fmt(chnPop?.value ?? null),
     },
     {
