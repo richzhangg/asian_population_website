@@ -264,6 +264,7 @@ export async function fetchCityWorldBankData(
     cityName,
     countryCode,
     countryName: wup.agglomerationName,
+    areaSqKm: wup.areaSqKm,
     totalPopulation,
     populationDensity,
     urbanPopulation,

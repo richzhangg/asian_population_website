@@ -441,15 +441,22 @@ export default function WorldBankDashboard({ city, wbData }: Props) {
 
   const economicData = { ...wbData.economicData, gdpHistory };
 
-  const {
-    countryName,
-    countryCode,
-    totalPopulation,
-    populationDensity,
-    urbanPopulation,
-    urbanPopulationPercent,
-    fetchedAt,
-  } = wbData;
+  // Derive population indicator cards from filtered history (reflects selected end year)
+  const latestPop = populationHistory[populationHistory.length - 1];
+  const totalPopulation: typeof wbData.totalPopulation = latestPop
+    ? { ...wbData.totalPopulation, value: latestPop.value, year: latestPop.year }
+    : wbData.totalPopulation;
+  const urbanPopulation: typeof wbData.urbanPopulation = latestPop
+    ? { ...wbData.urbanPopulation, value: latestPop.value, year: latestPop.year }
+    : wbData.urbanPopulation;
+  const populationDensity: typeof wbData.populationDensity = latestPop
+    ? { ...wbData.populationDensity, value: latestPop.value / wbData.areaSqKm, year: latestPop.year }
+    : wbData.populationDensity;
+  const urbanPopulationPercent: typeof wbData.urbanPopulationPercent = latestPop
+    ? { ...wbData.urbanPopulationPercent, year: latestPop.year }
+    : wbData.urbanPopulationPercent;
+
+  const { countryName, countryCode, fetchedAt } = wbData;
 
   const indicators = [
     {

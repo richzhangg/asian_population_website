@@ -19,6 +19,7 @@ export interface WorldBankCityData {
   cityName: string;
   countryCode: string;
   countryName: string;
+  areaSqKm: number;
   totalPopulation: WorldBankIndicatorValue;
   populationDensity: WorldBankIndicatorValue;
   urbanPopulation: WorldBankIndicatorValue;
